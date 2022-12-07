@@ -51,7 +51,7 @@ WHERE o.OrderStatusId in (7,13))
 
 INSERT INTO  [PaymentManagement].[tblRefundOrderPayment](OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay
 				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy,CreatedDate
-				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType)
+				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType,ReturnId)
 
 SELECT o.OrderId,CASE WHEN op.Amount - (o.RefundAmount+ISNULL(rop.RefundAmount,0))  > 0.00 THEN o.RefundAmount ELSE op.Amount - ISNULL(rop.RefundAmount,0) END,dbo.udfGetUserFullName(o.CustUserId) AS CustName
 				,u.MobileNo AS CustMobileNo,ISNULL(CONVERT(VARCHAR(100),pg.SpecialGateWayTransacNo),CONVERT(VARCHAR(100),pg.PaymentGetwayTransacNo)) AS PaymentGetwayTransacNo
@@ -67,10 +67,10 @@ SELECT o.OrderId,CASE WHEN op.Amount - (o.RefundAmount+ISNULL(rop.RefundAmount,0
 				,pg.GetwayPayStatus
 				,@pSalesReturnEndDate
 				,'Refund For Sales Return'
-				,3,pg.CustomerReferenceNo,@pSalesReturnStartDate,ISNULL(pg.Module,'SSPL'),o.OrderType
+				,3,pg.CustomerReferenceNo,@pSalesReturnStartDate,ISNULL(pg.Module,'SSPL'),o.OrderType,o.SalesReturnId
 FROM (
 
-			SELECT inv.OrderId,inv.OrderType,inv.CustUserId,
+			SELECT tsr.SalesReturnId,inv.OrderId,inv.OrderType,inv.CustUserId,
 			(SalesReturnGrossAmt - ISNULL(SalesReturnCashDiscount,0.00)-ISNULL(SalesReturnCouponDiscount,0.00) - ISNULL(SalesReturnSSCurrencyValue,0.00)
 					-
 					((Case When (inv.InvoiceVal + ISNULL(inv.BankDisc,0)+ ISNULL(inv.CouponDiscount,0.00) + ISNULL(inv.PromoDiscount,0.00)) > 0 Then
@@ -79,7 +79,8 @@ FROM (
 					(ISNULL(SalesReturnCashDiscount,0.00)+ ISNULL(SalesReturnCouponDiscount,0.00) + ISNULL(SalesReturnSSCurrencyValue,0.00)))) ELSE 0.00 END ))
 					) AS RefundAmount
 
-			FROM Orders.tblInvoice inv with(nolock)
+            FROM Orders.tblSalesReturn tsr with(nolock)
+            INNER JOIN Orders.tblInvoice inv on inv.InvoiceId = tsr.InvoiceId
 			INNER JOIN
 			(SELECT op.OrderId,SUM(p.Amount) AS Amount FROM PaymentManagement.tblOrderPayment op with(nolock)
 			INNER JOIN PaymentManagement.tblPayment p with(nolock) on op.PaymentId = p.PaymentId
@@ -93,7 +94,7 @@ FROM (
 
 			INNER JOIN (
 
-			SELECT sr.InvoiceId,ISNULL(SalesReturnGrossAmt,0) AS SalesReturnGrossAmt
+			SELECT sr.SalesReturnId,ISNULL(SalesReturnGrossAmt,0) AS SalesReturnGrossAmt
 			,ISNULL(SalesReturnCashDiscount,0) AS SalesReturnCashDiscount
 			,ISNULL(SalesReturnCouponDiscount,0) AS SalesReturnCouponDiscount
 			,ISNULL(SalesReturnSSCurrencyValue,0) AS SalesReturnSSCurrencyValue
@@ -101,7 +102,7 @@ FROM (
 				   FROM
 
 				   (
-						  SELECT s.InvoiceId,SUM(ii.ItemBasePrice*si.ReturnQty) AS SalesReturnGrossAmt
+						  SELECT s.SalesReturnId,SUM(ii.ItemBasePrice*si.ReturnQty) AS SalesReturnGrossAmt
 						  ,SUM((ii.ItemDiscount*si.ReturnQty)/ii.ItemQuantity) AS SalesReturnCashDiscount --check si.ItemDiscount/si.AcceptedQty
 						  ,SUM(ISNULL(CONVERT(numeric(10,2),(ii.CouponDiscount*si.ReturnQty)/ItemQuantity),0)) AS SalesReturnCouponDiscount
 						  ,SUM(ISNULL(CONVERT(numeric(10,2),(ii.SSCurrencyValue*si.ReturnQty)/ItemQuantity),0)) AS SalesReturnSSCurrencyValue
@@ -123,9 +124,9 @@ FROM (
 							inner join Orders.tblOrder o on i.OrderId =o.OrderId
 							and o.OrderStatusId in (7,13)
 						  )
-						   GROUP BY s.InvoiceId
+						   GROUP BY s.SalesReturnId
 				   ) sr
-				) tbl on inv.InvoiceId = tbl.InvoiceId
+				) tbl on tsr.SalesReturnId = tbl.SalesReturnId
 			WHERE inv.InvUserType IS NULL
 			--UNION
 
