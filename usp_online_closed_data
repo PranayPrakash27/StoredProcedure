@@ -1,0 +1,338 @@
+USE [SSSPL]
+GO
+/****** Object:  StoredProcedure [PaymentManagement].[uspInsertRefundListforSalesReturnAfter9thAug21]    Script Date: 12/12/2022 5:19:09 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Tanmoy
+-- Create date: 09-Aug-2017
+-- Description:	Sales Return Automatic Refund
+-- =============================================
+ALTER PROCEDURE [PaymentManagement].[uspInsertRefundListforSalesReturnAfter9thAug21]
+
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+  DECLARE
+    @pPaymentStartDate datetime,
+    @pPaymentEndDate  datetime,
+	@pSalesReturnStartDate datetime,
+	@pSalesReturnEndDate datetime
+
+BEGIN TRY
+
+
+SELECT  @pPaymentEndDate = MAX(Updateddate)  FROM PaymentManagement.tblRefundOrderPayment
+SELECT @pSalesReturnStartDate = MAX(RunDate) FROM dbo.tblScheduler  WHERE SchedulerName = 'Online Refund Against Return'
+  ---SET @pPaymentStartDate = ISNULL(@pPaymentStartDate,'2017-03-20 11:00:00.000')
+  ---SET @pPaymentEndDate = DATEADD(MINUTE,-30,GETDATE())
+  SET @pSalesReturnStartDate = ISNULL(@pSalesReturnStartDate,GETDATE()-1)
+  SET @pSalesReturnEndDate = GETDATE()
+
+CREATE TABLE #tblInvoiceOrder(InvoiceId bigint,InvoiceItemId bigint,AcceptedQty numeric(10,2),IsfullSalesReturn bit,SalesReturnItemId BIGINT)
+INSERT INTO #tblInvoiceOrder
+SELECT s.InvoiceId,si.InvoiceItemId,si.ReturnQty,s.IsFullReturn,si.SalesReturnItemId
+FROM Orders.tblSalesReturn s
+INNER JOIN Orders.tblSalesReturnItemCust si on s.SalesReturnId = si.SalesReturnId
+WHERE si.SalesReturnStatusId = 6
+and  ReturnQty !=0
+AND ISNULL(si.IsOnlineRefundInitiated,0)=0
+AND ISNULL(si.ClosedDate,si.UpdatedDate) > @pSalesReturnStartDate AND ISNULL(si.ClosedDate,si.UpdatedDate) <= @pSalesReturnEndDate
+-- AND CONVERT(DATE,si.Createddate)>= '08/09/2021'
+AND s.InvoiceId NOT IN (17050680,7632397,7583914,9404921,99905951,9905952,9348382,9713242,9786627,9857336,10033761,10169341,9948956,13486803,17684222,
+17683083,16828136,19740862,20714644,24700536) -- added by hiranmoy on 4.12.2018
+AND s.InvoiceId NOT IN (select distinct i.InvoiceId from Orders.tblInvoice i with(nolock)
+inner join Orders.tblOrder o on i.OrderId =o.OrderId
+WHERE o.OrderStatusId in (7,13))
+
+
+
+-- INSERT INTO  [PaymentManagement].[tblRefundOrderPayment](OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay
+-- 				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy,CreatedDate
+-- 				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType,ReverseBankDisc)
+-- <added by pranay 12.12.2022
+create table #tblRefundList(ReturnId bigint,OrderId bigint,RefundAmount numeric(10,2),CustName varchar(500),CustMobileNo bigint,PaymentGetwayTransacNo varchar(500)
+ ,GetWayResponse varchar(5000),PaymentGateWay VARCHAR(500),OrderDate datetime,AppType char(500),CustUserId bigint,EmailId varchar (500),TotalPayAmount numeric(10,2)
+            ,IsRefundInitiated bit,InitialRefundStatus varchar(500),PaymentGetwayId bigint,CreatedBy bigint,UpdatedBy bigint,CreatedDate DATETIME,UpdatedDate datetime
+            ,GateWayPayId varchar (500),PaymentStatus varchar (500),SalesReturnDate datetime,RefundReason varchar (500),RefundReasonId int,CustomerReferenceNo varchar (500)
+            ,Dateparam datetime,PgModule varchar (500),OrdOrderType char (500),ReverseBankDisc numeric(10,2),TotalOrderRefundAmount numeric(10,2),RefundedAmount numeric(10,2)
+			,isRefundExcess bit,ExcessAmount numeric(10,2)
+            ,FinalRefundAmount numeric(10,2))
+
+
+
+insert into #tblRefundList
+-- added by pranay 12.12.2022>
+SELECT o.SalesReturnId,o.OrderId,o.RefundAmount,o.CustUserId AS CustName
+				,u.MobileNo AS CustMobileNo,ISNULL(CONVERT(VARCHAR(100),pg.SpecialGateWayTransacNo),CONVERT(VARCHAR(100),pg.PaymentGetwayTransacNo)) AS PaymentGetwayTransacNo
+				,pg.GetwayResponse as GetWayResponse
+                ,pg.PaymentGateWay as PaymentGateWay,pg.CreatedDate AS OrderDate,pg.ApplicationType AS AppType,o.CustUserId,u.EmailId
+				,op.Amount as TotalPayAmount
+				,1 AS IsRefundInitiated ,'Refund Initialize' as InitialRefundStatus
+				,pg.PaymentGetwayId
+				,10001 AS CreatedBy,10001 AS UpdatedBy
+				,@pPaymentEndDate AS Createddate
+				,@pPaymentEndDate AS UpdatedDate
+				,pg.GetwayPayId
+				,pg.GetwayPayStatus
+				,@pSalesReturnEndDate AS SalesReturnDate
+				,'Refund For Sales Return' as RefundReason
+				,3 AS RefundReasonId,pg.CustomerReferenceNo,@pSalesReturnStartDate AS Dateparam,ISNULL(pg.Module,'SSPL') AS PgModule,o.OrderType,ISNULL(ReverseBankDisc,0) AS ReverseBankDisc
+				-- <added by pranay 12.12.2022
+				,o.OrderRefundAmount AS TotalOrderRefundAmount,rop.RefundAmount as RefundedAmount
+                ,CASE WHEN op.Amount - (ISNULL(o.OrderRefundAmount,0)+ISNULL(rop.RefundAmount,0))  > 0.00 THEN 0 ELSE 1 END AS isRefundExcess
+                ,CASE WHEN op.Amount - (ISNULL(o.OrderRefundAmount,0)+ISNULL(rop.RefundAmount,0))  > 0.00 THEN 0 ELSE (ISNULL(o.OrderRefundAmount,0)+ ISNULL(rop.RefundAmount,0) - op.Amount) END AS ExcessAmount
+                ,o.RefundAmount as FinalRefundAmount
+				-- added by pranay 12.12.2022>
+
+FROM (
+
+			SELECT tsr.SalesReturnId,inv.OrderId,inv.OrderType,inv.CustUserId,
+			(tbl.SalesReturnGrossAmt - ISNULL(tbl.SalesReturnCashDiscount,0.00)-ISNULL(tbl.SalesReturnCouponDiscount,0.00) - ISNULL(tbl.SalesReturnSSCurrencyValue,0.00)
+					-
+					((Case When (inv.InvoiceVal + ISNULL(inv.CouponDiscount,0.00) + ISNULL(inv.PromoDiscount,0.00)) > 0 Then
+					CONVERT(numeric(10,2),((ISNULL(inv.CouponDiscount,0.00) + ISNULL(inv.PromoDiscount,0.00))/(inv.InvoiceVal + ISNULL(inv.CouponDiscount,0.00)
+					+ ISNULL(inv.PromoDiscount,0.00)))*(tbl.SalesReturnGrossAmt -
+					(ISNULL(tbl.SalesReturnCashDiscount,0.00)+ ISNULL(tbl.SalesReturnCouponDiscount,0.00) + ISNULL(tbl.SalesReturnSSCurrencyValue,0.00)))) ELSE 0.00 END ))
+					)
+
+					- (Case When  ISNULL(inv.BankDisc,0.00) > 0 Then
+					CONVERT (NUMERIC(10,2),((((tbl.SalesReturnGrossAmt -
+					(ISNULL(tbl.SalesReturnCashDiscount,0.00)+ ISNULL(tbl.SalesReturnCouponDiscount,0.00) + ISNULL(tbl.SalesReturnSSCurrencyValue,0.00))
+					-
+
+					((Case When (inv.InvoiceVal+ ISNULL(inv.CouponDiscount,0.00)  + ISNULL(inv.PromoDiscount,0.00)) > 0 Then
+					CONVERT(numeric(10,2),((ISNULL(inv.CouponDiscount,0.00)  + ISNULL(inv.PromoDiscount,0.00))/(inv.InvoiceVal + ISNULL(inv.CouponDiscount,0.00)
+					+ ISNULL(inv.PromoDiscount,0.00)))*(tbl.SalesReturnGrossAmt -
+					(ISNULL(tbl.SalesReturnCashDiscount,0.00)+ ISNULL(tbl.SalesReturnCouponDiscount,0.00) + ISNULL(tbl.SalesReturnSSCurrencyValue,0.00)))) ELSE 0.00 END ))
+					))*ISNULL(inv.BankDisc,0.00))/inv.InvoiceVal )) ELSE 0.00 END )
+
+
+					AS RefundAmount,
+
+					-- <added by pranay 12.12.2022
+                    (tblinv.SalesReturnGrossAmt - ISNULL(tblinv.SalesReturnCashDiscount,0.00)-ISNULL(tblinv.SalesReturnCouponDiscount,0.00) - ISNULL(tblinv.SalesReturnSSCurrencyValue,0.00)
+					-
+					((Case When (inv.InvoiceVal + ISNULL(inv.CouponDiscount,0.00) + ISNULL(inv.PromoDiscount,0.00)) > 0 Then
+					CONVERT(numeric(10,2),((ISNULL(inv.CouponDiscount,0.00) + ISNULL(inv.PromoDiscount,0.00))/(inv.InvoiceVal + ISNULL(inv.CouponDiscount,0.00)
+					+ ISNULL(inv.PromoDiscount,0.00)))*(tblinv.SalesReturnGrossAmt -
+					(ISNULL(tblinv.SalesReturnCashDiscount,0.00)+ ISNULL(tblinv.SalesReturnCouponDiscount,0.00) + ISNULL(tblinv.SalesReturnSSCurrencyValue,0.00)))) ELSE 0.00 END ))
+					)
+
+					- (Case When  ISNULL(inv.BankDisc,0.00) > 0 Then
+					CONVERT (NUMERIC(10,2),((((tblinv.SalesReturnGrossAmt -
+					(ISNULL(tblinv.SalesReturnCashDiscount,0.00)+ ISNULL(tblinv.SalesReturnCouponDiscount,0.00) + ISNULL(tblinv.SalesReturnSSCurrencyValue,0.00))
+					-
+
+					((Case When (inv.InvoiceVal+ ISNULL(inv.CouponDiscount,0.00)  + ISNULL(inv.PromoDiscount,0.00)) > 0 Then
+					CONVERT(numeric(10,2),((ISNULL(inv.CouponDiscount,0.00)  + ISNULL(inv.PromoDiscount,0.00))/(inv.InvoiceVal + ISNULL(inv.CouponDiscount,0.00)
+					+ ISNULL(inv.PromoDiscount,0.00)))*(tblinv.SalesReturnGrossAmt -
+					(ISNULL(tblinv.SalesReturnCashDiscount,0.00)+ ISNULL(tblinv.SalesReturnCouponDiscount,0.00) + ISNULL(tblinv.SalesReturnSSCurrencyValue,0.00)))) ELSE 0.00 END ))
+					))*ISNULL(inv.BankDisc,0.00))/inv.InvoiceVal )) ELSE 0.00 END )
+
+
+					AS OrderRefundAmount	-- added by pranay 12.12.2022>
+
+
+
+
+					,(Case When  ISNULL(inv.BankDisc,0.00) > 0 Then
+					CONVERT (NUMERIC(10,2),((((tbl.SalesReturnGrossAmt -
+					(ISNULL(tbl.SalesReturnCashDiscount,0.00)+ ISNULL(tbl.SalesReturnCouponDiscount,0.00) + ISNULL(tbl.SalesReturnSSCurrencyValue,0.00))
+					-
+
+					((Case When (inv.InvoiceVal+ ISNULL(inv.CouponDiscount,0.00)  + ISNULL(inv.PromoDiscount,0.00)) > 0 Then
+					CONVERT(numeric(10,2),((ISNULL(inv.CouponDiscount,0.00)  + ISNULL(inv.PromoDiscount,0.00))/(inv.InvoiceVal + ISNULL(inv.CouponDiscount,0.00)
+					+ ISNULL(inv.PromoDiscount,0.00)))*(tbl.SalesReturnGrossAmt -
+					(ISNULL(tbl.SalesReturnCashDiscount,0.00)+ ISNULL(tbl.SalesReturnCouponDiscount,0.00) + ISNULL(tbl.SalesReturnSSCurrencyValue,0.00)))) ELSE 0.00 END ))
+					))*ISNULL(inv.BankDisc,0.00))/inv.InvoiceVal )) ELSE 0.00 END ) AS ReverseBankDisc
+
+			FROM Orders.tblSalesReturn tsr WITH(NOLOCK) -- <added by pranay 12.12.2022>
+			INNER JOIN Orders.tblInvoice inv on tsr.InvoiceId = inv.InvoiceId
+			INNER JOIN
+			(SELECT op.OrderId,SUM(p.Amount) AS Amount FROM PaymentManagement.tblOrderPayment op with(nolock)
+			INNER JOIN PaymentManagement.tblPayment p with(nolock) on op.PaymentId = p.PaymentId
+			WHERE p.PayMethodId = 3 AND Paypurpose = 'SP'
+
+			GROUP BY op.OrderId
+			) op on inv.OrderId =op.OrderId
+
+			LEFT JOIN (SELECT OrderId,SUM(RefundAmount) AS RefundAmount FROM PaymentManagement.tblRefundOrderPayment
+					GROUP BY OrderId) rop on inv.OrderId = rop.OrderId
+
+			-- <added by pranay 12.12.2022
+            INNER JOIN (
+
+			SELECT sr.SalesReturnId,ISNULL(SalesReturnGrossAmt,0) AS SalesReturnGrossAmt
+			,ISNULL(SalesReturnCashDiscount,0) AS SalesReturnCashDiscount
+			,ISNULL(SalesReturnCouponDiscount,0) AS SalesReturnCouponDiscount
+			,ISNULL(SalesReturnSSCurrencyValue,0) AS SalesReturnSSCurrencyValue
+
+				   FROM
+
+				   (
+						  SELECT s.SalesReturnId,s.InvoiceId,SUM(ii.ItemBasePrice*si.AcceptedQty) AS SalesReturnGrossAmt
+						  ,SUM((ii.ItemDiscount*si.AcceptedQty)/ii.ItemQuantity) AS SalesReturnCashDiscount --check si.ItemDiscount/si.AcceptedQty
+						  ,SUM(ISNULL(CONVERT(numeric(10,2),(ii.CouponDiscount*si.AcceptedQty)/ItemQuantity),0)) AS SalesReturnCouponDiscount
+						  ,SUM(ISNULL(CONVERT(numeric(10,2),(ii.SSCurrencyValue*si.AcceptedQty)/ItemQuantity),0)) AS SalesReturnSSCurrencyValue
+
+
+						  FROM Orders.tblSalesReturn s WITH(NOLOCK)
+						  INNER JOIN Orders.tblSalesReturnItemCust si WITH(NOLOCK) on s.SalesReturnId = si.SalesReturnId
+						    INNER JOIN (select distinct InvoiceId from #tblInvoiceOrder) i on s.InvoiceId = i.InvoiceId
+						  INNER JOIN  Orders.tblInvoiceItem ii WITH(NOLOCK) on si.InvoiceItemId = ii.InvoiceItemId
+						  WHERE si.SalesReturnStatusId = 6  --AND ISNULL(i.IsfullSalesReturn,0) = 0
+						   and ReturnQty !=0
+						   AND ISNULL(si.IsOnlineRefundInitiated,0)=0
+					        AND CONVERT(DATE,si.Createddate)>= '08/09/2021'
+						   AND s.InvoiceId NOT IN (17050680,7632397,7583914,9404921,99905951,9905952,9348382,9713242,9786627,9857336,10033761,10169341,9948956,13486803,17684222,
+17683083,16828136,19740862,20714644,24700536) -- added by hiranmoy on 4.12.2018
+						  AND ISNULL(si.ClosedDate,si.UpdatedDate) > @pSalesReturnStartDate AND ISNULL(si.ClosedDate,si.UpdatedDate) <= @pSalesReturnEndDate
+						  AND s.InvoiceId NOT IN
+						  (
+							 select distinct i.InvoiceId from Orders.tblInvoice i with(nolock)
+							INNER JOIN (select distinct InvoiceId from #tblInvoiceOrder) s on s.InvoiceId = i.InvoiceId
+							inner join Orders.tblOrder o on i.OrderId =o.OrderId
+							and o.OrderStatusId in (7,13)
+						  )
+
+						   GROUP BY s.SalesReturnId, s.InvoiceId
+
+				   ) sr
+                --    drop TABLE #tblInvoiceOrder
+				) tbl on tsr.SalesReturnId = tbl.SalesReturnId	-- added by pranay 12.12.2022>
+
+
+			LEFT JOIN (
+
+			SELECT sr.InvoiceId,ISNULL(SalesReturnGrossAmt,0) AS SalesReturnGrossAmt
+			,ISNULL(SalesReturnCashDiscount,0) AS SalesReturnCashDiscount
+			,ISNULL(SalesReturnCouponDiscount,0) AS SalesReturnCouponDiscount
+			,ISNULL(SalesReturnSSCurrencyValue,0) AS SalesReturnSSCurrencyValue
+
+				   FROM
+
+				   (
+						  SELECT s.InvoiceId,SUM(ii.ItemBasePrice*si.AcceptedQty) AS SalesReturnGrossAmt
+						  ,SUM((ii.ItemDiscount*si.AcceptedQty)/ii.ItemQuantity) AS SalesReturnCashDiscount --check si.ItemDiscount/si.AcceptedQty
+						  ,SUM(ISNULL(CONVERT(numeric(10,2),(ii.CouponDiscount*si.AcceptedQty)/ItemQuantity),0)) AS SalesReturnCouponDiscount
+						  ,SUM(ISNULL(CONVERT(numeric(10,2),(ii.SSCurrencyValue*si.AcceptedQty)/ItemQuantity),0)) AS SalesReturnSSCurrencyValue
+						  FROM Orders.tblSalesReturn s WITH(NOLOCK)
+						  INNER JOIN Orders.tblSalesReturnItemCust si WITH(NOLOCK) on s.SalesReturnId = si.SalesReturnId
+						    INNER JOIN (select distinct InvoiceId from #tblInvoiceOrder) i on s.InvoiceId = i.InvoiceId
+						  INNER JOIN  Orders.tblInvoiceItem ii WITH(NOLOCK) on si.InvoiceItemId = ii.InvoiceItemId
+						  WHERE si.SalesReturnStatusId = 6  --AND ISNULL(i.IsfullSalesReturn,0) = 0
+						   and ReturnQty !=0
+						   AND ISNULL(si.IsOnlineRefundInitiated,0)=0
+						    AND CONVERT(DATE,si.Createddate)>= '08/09/2021'
+						   AND s.InvoiceId NOT IN (17050680,7632397,7583914,9404921,99905951,9905952,9348382,9713242,9786627,9857336,10033761,10169341,9948956,13486803,17684222,
+17683083,16828136,19740862,20714644,24700536) -- added by hiranmoy on 4.12.2018
+						  AND ISNULL(si.ClosedDate,si.UpdatedDate) > @pSalesReturnStartDate AND ISNULL(si.ClosedDate,si.UpdatedDate) <= @pSalesReturnEndDate
+						  AND s.InvoiceId NOT IN
+						  (
+							 select distinct i.InvoiceId from Orders.tblInvoice i with(nolock)
+							INNER JOIN (select distinct InvoiceId from #tblInvoiceOrder) s on s.InvoiceId = i.InvoiceId
+							inner join Orders.tblOrder o on i.OrderId =o.OrderId
+							and o.OrderStatusId in (7,13)
+						  )
+						   GROUP BY s.InvoiceId
+				   ) sr
+				) tblinv on inv.InvoiceId = tblinv.InvoiceId
+			WHERE inv.InvUserType IS NULL
+			--UNION
+
+			--SELECT inv.OrderId,inv.CustUserId,p.Amount - ISNULL(RefundAmount,0) AS RefundAmount
+			--FROM Orders.tblInvoice inv
+			--INNER JOIN Orders.tblSalesReturn sr on inv.InvoiceId = sr.InvoiceId
+			-- INNER JOIN (select distinct InvoiceId,IsfullSalesReturn from #tblInvoiceOrder) tmp on inv.InvoiceId = tmp.InvoiceId
+			--INNER JOIN PaymentManagement.tblOrderPayment op on inv.OrderId =op.OrderId
+			--INNER JOIN PaymentManagement.tblPayment p on op.PaymentId = p.PaymentId
+			--inner JOIN (SELECT OrderId,OrderStatusId FROM Orders.tblOrder) rfo on inv.OrderId = rfo.OrderId
+			--LEFT JOIN (SELECT OrderId,SUM(RefundAmount) AS RefundAmount FROM PaymentManagement.tblRefundOrderPayment
+			--		GROUP BY OrderId) rop on inv.OrderId = rop.OrderId
+			--WHERE rfo.OrderstatusId NOT IN (7,13) AND ISNULL(tmp.IsfullSalesReturn,0) = 1
+			--AND p.Amount - ISNULL(RefundAmount,0) >0
+			--AND p.PayMethodId = 3 AND Paypurpose = 'SP'
+			--and inv.InvUserType IS NULL
+			--AND NOT EXISTS (SELECT r.OrderId FROM PaymentManagement.tblRefundOrderPayment r INNER JOIN Orders.tblInvoice i on r.OrderId = i.OrderId
+			--inner join (select distinct InvoiceId from #tblInvoiceOrder) tmp on i.InvoiceId = tmp.InvoiceId  WHERE RefundReasonId=3)
+) o
+INNER JOIN UserManagement.tblUser u WITH(NOLOCK) on o.CustUserId = u.UserId
+INNER JOIN PaymentManagement.tblOrderPaymentGetway opg with(nolock) on o.OrderId = opg.OrderId
+INNER JOIN PaymentManagement.tblPaymentGetway pg with(nolock) on opg.PaymentGetwayTransacNo = pg.PaymentGetwayTransacNo
+INNER JOIN
+			(SELECT op.OrderId,SUM(p.Amount) AS Amount FROM PaymentManagement.tblOrderPayment op with(nolock)
+			INNER JOIN PaymentManagement.tblPayment p with(nolock) on op.PaymentId = p.PaymentId
+			WHERE p.PayMethodId = 3 AND Paypurpose = 'SP'
+
+			GROUP BY op.OrderId
+			) op on o.OrderId =op.OrderId
+LEFT JOIN (SELECT OrderId,SUM(RefundAmount) AS RefundAmount FROM PaymentManagement.tblRefundOrderPayment WITH(NOLOCK)
+					GROUP BY OrderId) rop on o.OrderId = rop.OrderId
+WHERE  op.Amount - ISNULL(rop.RefundAmount,0.00) > 0.00
+AND ISNULL(pg.PaymentGateWay,'') != 'MPOS'
+
+-- drop table #tblInvoiceOrder
+-- drop table #tblRefundList;
+-- drop table #tblInvoiceOrder;
+
+-- <added by pranay 12.12.2022
+UPDATE #tblRefundList
+SET FinalRefundAmount = CASE WHEN RefundAmount - ExcessAmount >= 0.00 THEN RefundAmount - ExcessAmount ELSE 0.00 END
+where isRefundExcess = 1 and returnId in
+-- selecting all the sales return id with MaxRefundAmount.
+(select returnId from
+-- Ranking the return ids with same OrderId and same MaxRefundAmount and picking the top rank returnid to remove the excess amonnt from that id.
+(select *,row_number() over (partition by tbld.orderId order by tbld.returnid desc) as n
+from
+    -- selecting the returnids with the maxRefundAmount
+    (SELECT distinct rl.orderId, rl.returnId, r.MaxRefundAmount
+    FROM (
+        -- Select the orderId and Correspoding maxRefundAmount for all the returns on that orderid.
+        SELECT orderId, MAX(refundamount) as MaxRefundAmount
+        FROM #tblRefundList
+        where isRefundExcess = 1
+        GROUP BY orderid
+    ) r
+    INNER JOIN #tblRefundList rl
+    ON rl.orderid = r.orderid AND rl.refundAmount = r.MaxRefundAmount) tbld
+)tblf
+where tblf.n <=1)
+
+
+INSERT INTO  [PaymentManagement].[tblRefundOrderPayment](ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay
+				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy,CreatedDate
+				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType,ReverseBankDisc)
+SELECT  ReturnId,OrderId,FinalRefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay
+				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy,CreatedDate
+				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType,ReverseBankDisc
+
+
+FROM #tblRefundList 	-- added by pranay 12.12.2022>
+
+UPDATE B SET B.IsOnlineRefundInitiated =1 FROM #tblInvoiceOrder A
+INNER JOIN Orders.tblSalesReturnItem B on A.SalesReturnItemId = B.SalesReturnItemId
+
+
+UPDATE B SET B.IsOnlineRefundInitiated =1 FROM #tblInvoiceOrder A
+INNER JOIN Orders.tblSalesReturnItemCust B on A.SalesReturnItemId = B.SalesReturnItemId
+
+
+drop table #tblRefundList;
+drop table #tblInvoiceOrder;
+
+    END TRY
+    BEGIN CATCH
+
+        /*Log error details*/
+        INSERT INTO dbo.tblSSSPLError(ErrorNo,ErrorSeverity,ErrorState,ErrorProcedure,ErrorLine,ErrorMsg)
+        SELECT ERROR_NUMBER(),ERROR_SEVERITY(),ERROR_STATE(),ERROR_PROCEDURE(),ERROR_LINE(),ERROR_MESSAGE()
+
+    END CATCH
+END
+GO
