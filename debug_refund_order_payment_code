@@ -1,22 +1,22 @@
-USE [SSSPL]
-GO
-/****** Object:  StoredProcedure [PaymentManagement].[uspInsertRefundListforSalesReturnAfter9thAug21]    Script Date: 12/12/2022 5:19:09 PM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- =============================================
--- Author:		Tanmoy
--- Create date: 09-Aug-2017
--- Description:	Sales Return Automatic Refund
--- =============================================
-ALTER PROCEDURE [PaymentManagement].[uspInsertRefundListforSalesReturnAfter9thAug21]
 
-AS
-BEGIN
-	-- SET NOCOUNT ON added to prevent extra result sets from
-	-- interfering with SELECT statements.
-	SET NOCOUNT ON;
+-- GO
+-- /****** Object:  StoredProcedure [PaymentManagement].[uspInsertRefundListforSalesReturnAfter9thAug21]    Script Date: 12/12/2022 5:19:09 PM ******/
+-- SET ANSI_NULLS ON
+-- GO
+-- SET QUOTED_IDENTIFIER ON
+-- GO
+-- -- =============================================
+-- -- Author:		Tanmoy
+-- -- Create date: 09-Aug-2017
+-- -- Description:	Sales Return Automatic Refund
+-- -- =============================================
+-- ALTER PROCEDURE [PaymentManagement].[uspInsertRefundListforSalesReturnAfter9thAug21]
+
+-- AS
+-- BEGIN
+-- 	-- SET NOCOUNT ON added to prevent extra result sets from
+-- 	-- interfering with SELECT statements.
+-- 	SET NOCOUNT ON;
 
   DECLARE
     @pPaymentStartDate datetime,
@@ -24,11 +24,11 @@ BEGIN
 	@pSalesReturnStartDate datetime,
 	@pSalesReturnEndDate datetime
 
-BEGIN TRY
+-- BEGIN TRY
 
 
 SELECT  @pPaymentEndDate = MAX(Updateddate)  FROM PaymentManagement.tblRefundOrderPayment
-SELECT @pSalesReturnStartDate = MAX(RunDate) FROM dbo.tblScheduler  WHERE SchedulerName = 'Online Refund Against Return'
+SELECT @pSalesReturnStartDate = '12/21/2022 00:00:00.000'--MAX(RunDate) FROM dbo.tblScheduler  WHERE SchedulerName = 'Online Refund Against Return'
   ---SET @pPaymentStartDate = ISNULL(@pPaymentStartDate,'2017-03-20 11:00:00.000')
   ---SET @pPaymentEndDate = DATEADD(MINUTE,-30,GETDATE())
   SET @pSalesReturnStartDate = ISNULL(@pSalesReturnStartDate,GETDATE()-1)
@@ -41,7 +41,7 @@ FROM Orders.tblSalesReturn s
 INNER JOIN Orders.tblSalesReturnItemCust si on s.SalesReturnId = si.SalesReturnId
 WHERE si.SalesReturnStatusId = 6
 and  ReturnQty !=0
-AND ISNULL(si.IsOnlineRefundInitiated,0)=0
+AND ISNULL(si.IsOnlineRefundInitiated,0)=1
 AND ISNULL(si.ClosedDate,si.UpdatedDate) > @pSalesReturnStartDate AND ISNULL(si.ClosedDate,si.UpdatedDate) <= @pSalesReturnEndDate
 AND CONVERT(DATE,si.Createddate)>= '08/09/2021'
 AND s.InvoiceId NOT IN (17050680,7632397,7583914,9404921,99905951,9905952,9348382,9713242,9786627,9857336,10033761,10169341,9948956,13486803,17684222,
@@ -168,6 +168,7 @@ FROM (
 			-- <added by pranay 12.12.2022
             INNER JOIN (
 
+
 			SELECT sr.SalesReturnId,ISNULL(SalesReturnGrossAmt,0) AS SalesReturnGrossAmt
 			,ISNULL(SalesReturnCashDiscount,0) AS SalesReturnCashDiscount
 			,ISNULL(SalesReturnCouponDiscount,0) AS SalesReturnCouponDiscount
@@ -188,10 +189,10 @@ FROM (
 						  INNER JOIN  Orders.tblInvoiceItem ii WITH(NOLOCK) on si.InvoiceItemId = ii.InvoiceItemId
 						  WHERE si.SalesReturnStatusId = 6  --AND ISNULL(i.IsfullSalesReturn,0) = 0
 						   and ReturnQty !=0
-						   AND ISNULL(si.IsOnlineRefundInitiated,0)=0
+						   AND ISNULL(si.IsOnlineRefundInitiated,0)=1
 					        AND CONVERT(DATE,si.Createddate)>= '08/09/2021'
-						   AND s.InvoiceId NOT IN (17050680,7632397,7583914,9404921,99905951,9905952,9348382,9713242,9786627,9857336,10033761,10169341,9948956,13486803,17684222,
-17683083,16828136,19740862,20714644,24700536) -- added by hiranmoy on 4.12.2018
+-- 						   AND s.InvoiceId NOT IN (17050680,7632397,7583914,9404921,99905951,9905952,9348382,9713242,9786627,9857336,10033761,10169341,9948956,13486803,17684222,
+-- 17683083,16828136,19740862,20714644,24700536) -- added by hiranmoy on 4.12.2018
 						  AND ISNULL(si.ClosedDate,si.UpdatedDate) > @pSalesReturnStartDate AND ISNULL(si.ClosedDate,si.UpdatedDate) <= @pSalesReturnEndDate
 						  AND s.InvoiceId NOT IN
 						  (
@@ -200,8 +201,10 @@ FROM (
 							inner join Orders.tblOrder o on i.OrderId =o.OrderId
 							and o.OrderStatusId in (7,13)
 						  )
+                          AND s.SalesReturnId in ('2100780','2102513')
 
 						   GROUP BY s.SalesReturnId, s.InvoiceId
+
 
 				   ) sr
 
@@ -209,6 +212,7 @@ FROM (
 
 
 			LEFT JOIN (
+
 
 			SELECT sr.InvoiceId,ISNULL(SalesReturnGrossAmt,0) AS SalesReturnGrossAmt
 			,ISNULL(SalesReturnCashDiscount,0) AS SalesReturnCashDiscount
@@ -228,7 +232,7 @@ FROM (
 						  INNER JOIN  Orders.tblInvoiceItem ii WITH(NOLOCK) on si.InvoiceItemId = ii.InvoiceItemId
 						  WHERE si.SalesReturnStatusId = 6  --AND ISNULL(i.IsfullSalesReturn,0) = 0
 						   and ReturnQty !=0
-						   AND ISNULL(si.IsOnlineRefundInitiated,0)=0
+						   AND ISNULL(si.IsOnlineRefundInitiated,0)=1
 						    AND CONVERT(DATE,si.Createddate)>= '08/09/2021'
 						   AND s.InvoiceId NOT IN (17050680,7632397,7583914,9404921,99905951,9905952,9348382,9713242,9786627,9857336,10033761,10169341,9948956,13486803,17684222,
 17683083,16828136,19740862,20714644,24700536) -- added by hiranmoy on 4.12.2018
@@ -240,10 +244,14 @@ FROM (
 							inner join Orders.tblOrder o on i.OrderId =o.OrderId
 							and o.OrderStatusId in (7,13)
 						  )
+
 						   GROUP BY s.InvoiceId
+
 				   ) sr
+                -- drop table #tblInvoiceOrder
 				) tblinv on inv.InvoiceId = tblinv.InvoiceId
 			WHERE inv.InvUserType IS NULL
+
 			--UNION
 
 			--SELECT inv.OrderId,inv.CustUserId,p.Amount - ISNULL(RefundAmount,0) AS RefundAmount
@@ -278,6 +286,8 @@ WHERE  op.Amount - ISNULL(rop.RefundAmount,0.00) > 0.00
 AND ISNULL(pg.PaymentGateWay,'') != 'MPOS'
 
 
+
+
 -- <added by pranay 12.12.2022
 UPDATE #tblRefundList
 SET FinalRefundAmount = CASE WHEN RefundAmount - ExcessAmount >= 0.00 THEN RefundAmount - ExcessAmount ELSE 0.00 END
@@ -302,32 +312,35 @@ from
 where tblf.n <=1)
 
 
-INSERT INTO  [PaymentManagement].[tblRefundOrderPayment](ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay
-				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy,CreatedDate
-				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType,ReverseBankDisc)
+-- INSERT INTO  [PaymentManagement].[tblRefundOrderPayment](ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay
+-- 				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy,CreatedDate
+-- 				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType,ReverseBankDisc)
 SELECT  ReturnId,OrderId,FinalRefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay
 				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy,CreatedDate
 				,UpdatedDate,GateWayPayId,PaymentStatus,SalesReturnDate,RefundReason,RefundReasonId,CustomerReferenceNo,Dateparam,PgModule,OrdOrderType,ReverseBankDisc
 
 
 FROM #tblRefundList 	-- added by pranay 12.12.2022>
-
-UPDATE B SET B.IsOnlineRefundInitiated =1 FROM #tblInvoiceOrder A
-INNER JOIN Orders.tblSalesReturnItem B on A.SalesReturnItemId = B.SalesReturnItemId
-
-
-UPDATE B SET B.IsOnlineRefundInitiated =1 FROM #tblInvoiceOrder A
-INNER JOIN Orders.tblSalesReturnItemCust B on A.SalesReturnItemId = B.SalesReturnItemId
+drop table #tblInvoiceOrder
+drop table #tblRefundList
 
 
+-- UPDATE B SET B.IsOnlineRefundInitiated =1 FROM #tblInvoiceOrder A
+-- INNER JOIN Orders.tblSalesReturnItem B on A.SalesReturnItemId = B.SalesReturnItemId
 
-    END TRY
-    BEGIN CATCH
 
-        /*Log error details*/
-        INSERT INTO dbo.tblSSSPLError(ErrorNo,ErrorSeverity,ErrorState,ErrorProcedure,ErrorLine,ErrorMsg)
-        SELECT ERROR_NUMBER(),ERROR_SEVERITY(),ERROR_STATE(),ERROR_PROCEDURE(),ERROR_LINE(),ERROR_MESSAGE()
+-- UPDATE B SET B.IsOnlineRefundInitiated =1 FROM #tblInvoiceOrder A
+-- INNER JOIN Orders.tblSalesReturnItemCust B on A.SalesReturnItemId = B.SalesReturnItemId
 
-    END CATCH
-END
-GO
+
+
+--     END TRY
+--     BEGIN CATCH
+
+--         /*Log error details*/
+--         INSERT INTO dbo.tblSSSPLError(ErrorNo,ErrorSeverity,ErrorState,ErrorProcedure,ErrorLine,ErrorMsg)
+--         SELECT ERROR_NUMBER(),ERROR_SEVERITY(),ERROR_STATE(),ERROR_PROCEDURE(),ERROR_LINE(),ERROR_MESSAGE()
+
+--     END CATCH
+-- END
+-- GO
