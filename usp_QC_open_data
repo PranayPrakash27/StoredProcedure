@@ -97,11 +97,8 @@ INSERT INTO #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetw
 				)
 
 			SELECT inv.SalesReturnId -- updated by pranay 21.12.2022
-            -- ,Net
-            -- ,OrderRefundAmount
-            -- ,WalletReverse
             ,o.OrderId
-            ,inv.RefundAmount
+            ,inv.RefundAmount AS RefundAmount
             ,c.fullname,b.mobileno,NULL,NULL,'QC'
 				,o.OrderDate,NULL,o.CustUserId,b.EmailId,inv.Net,1,'Refund Initiated',1,10001,10001
 				,GETDATE(),GETDATE(),NULL,NULL,'Return','SSSPL',3,NULL,GETDATE(),

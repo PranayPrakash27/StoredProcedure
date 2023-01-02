@@ -102,11 +102,7 @@ INSERT INTO   #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGe
 				)
 			SELECT inv.SalesReturnId -- updated by pranay 12.12.2022
             ,o.OrderId
-            -- ,Net
-            -- ,OrderRefundAmount
-            -- ,WalletReverse
-            ,CASE WHEN Net - (inv.OrderRefundAmount + ISNULL(toref.WalletReverse,0))>=-1 AND
-			Net - (inv.RefundAmount + ISNULL(toref.WalletReverse,0))>=-1 THEN inv.RefundAmount ELSE 0 END AS RefundAmount
+            ,inv.RefundAmount AS RefundAmount
             ,c.fullname,b.mobileno,NULL,NULL,'QC'
 				,o.OrderDate,NULL,o.CustUserId,b.EmailId,inv.Net,1,'Refund Initiated',1,10001,10001
 				,GETDATE(),GETDATE(),NULL,NULL,'Return','SSSPL',3,NULL,GETDATE()
