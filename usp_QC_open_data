@@ -38,7 +38,7 @@ WHERE si.SalesReturnStatusId NOT IN (3,6)
 and  ReturnQty !=0
 AND DATEDIFF(DD,CONVERT(DATE,si.CreatedDate),CONVERT(DATE,GETDATE()))>5
 AND CONVERT(DATE,si.CreatedDate)>= '08/09/2021'
--- AND ISNULL(si.IsWalletRefundInitiated,0)=0
+AND ISNULL(si.IsWalletRefundInitiated,0)=0
 AND ISNULL(si.PaymentPefMode,'') IN ('Q')
 AND s.InvoiceId NOT IN (SELECT InvoiceId FROm Orders.tblInvoice inv with(nolock)
 			INNER JOIN Orders.tblOrder ord with(nolock) on Inv.OrderId =ord.OrderId
@@ -236,7 +236,7 @@ INSERT INTO #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetw
 						 WHERE si.SalesReturnStatusId NOT IN (3,6)
 						 AND  ReturnQty !=0
 						 AND DATEDIFF(DD,CONVERT(DATE,si.CreatedDate),CONVERT(DATE,GETDATE()))>5
-						--  AND ISNULL(IsWalletRefundInitiated,0)=0
+						 AND ISNULL(IsWalletRefundInitiated,0)=0
 						 AND CONVERT(DATE,si.CreatedDate)>= '08/09/2021'
 						 AND ISNULL(si.PaymentPefMode,'') IN ('Q')
 
@@ -265,7 +265,7 @@ INSERT INTO #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetw
 						 WHERE si.SalesReturnStatusId NOT IN (3,6)
 						 AND  ReturnQty !=0
 						 AND DATEDIFF(DD,CONVERT(DATE,si.CreatedDate),CONVERT(DATE,GETDATE()))>5
-						--  AND ISNULL(IsWalletRefundInitiated,0)=0
+						 AND ISNULL(IsWalletRefundInitiated,0)=0
 						 AND CONVERT(DATE,si.CreatedDate)>= '08/09/2021'
 						 AND ISNULL(si.PaymentPefMode,'') IN ('Q')
 
