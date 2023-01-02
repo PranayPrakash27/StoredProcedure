@@ -84,7 +84,7 @@ Create table #tbl([PaymentGetwayId] [bigint] NOT NULL,
 	[OrdOrderType] [char](1) NULL,
 	[QCWalletNo] [varchar](50) NULL,
 	[RefundGateWayPayId] [bigint] NULL,
-    [isRefundExcess] [bit] Null, [ExcessAmount] [numeric] NULL     -- added by pranay 02.01.2023
+    [isRefundExcess] [bit] Null, [ExcessAmount] [numeric](10,2) NULL     -- added by pranay 02.01.2023
 	,CODPayment numeric(10,2) NULL, CODPaymentQC numeric(10,2) NULL, CODPaymentFKH numeric(10,2) NULL --added on 02.09.2022
 	)
 
