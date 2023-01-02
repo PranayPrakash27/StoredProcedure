@@ -273,7 +273,6 @@ INSERT INTO   #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGe
 
 			WHERE inv.InvUserType IS NULL AND ord.OrderStatusId NOT IN (6,7,13)
 			AND ord.HBId NOT IN (10149,369097,3629417,3632944,4778526)
-            AND inv.OrderId in ('36443456777')
 
 			) inv
 			INNER JOIN usermanagement.tbluser b on inv.CustUserId =b.UserId
