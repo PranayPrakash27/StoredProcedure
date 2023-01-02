@@ -100,7 +100,8 @@ INSERT INTO   #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGe
 				,CODPayment, CODPaymentQC, CODPaymentFKH
              ,isRefundExcess, ExcessAmount    -- added by pranay 02.01.2023
 				)
-			SELECT inv.SalesReturnId,o.OrderId   -- updated by pranay 12.12.2022
+			SELECT inv.SalesReturnId -- updated by pranay 12.12.2022
+            ,o.OrderId
             -- ,Net
             -- ,OrderRefundAmount
             -- ,WalletReverse
