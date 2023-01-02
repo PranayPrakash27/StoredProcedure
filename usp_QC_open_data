@@ -79,7 +79,8 @@ Create table #tbl([PaymentGetwayId] [bigint] NOT NULL,
         [IsDisputedOrders] [bit] NULL,
         [OrdOrderType] [char](1) NULL,
         [QCWalletNo] [varchar](50) NULL,
-        [RefundGateWayPayId] [bigint] NULL
+        [RefundGateWayPayId] [bigint] NULL,
+        [isRefundExcess] [bit] Null, [ExcessAmount] numeric(10,2) NULL     -- added by pranay 02.01.2023
         ,CODPayment numeric(10,2) NULL, CODPaymentQC numeric(10,2) NULL, CODPaymentFKH numeric(10,2) NULL --added on 02.09.2022
         )
 
@@ -91,17 +92,20 @@ INSERT INTO #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetw
 				,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy
 				,CreatedDate,UpdatedDate,GateWayPayId,PaymentStatus,RefundReason,PgModule,RefundReasonId,CustomerReferenceNo,dateparam,QCWalletNo
 				,CODPayment, CODPaymentQC, CODPaymentFKH
+                ,isRefundExcess, ExcessAmount    -- added by pranay 02.01.2023
+
 				)
 
 			SELECT inv.SalesReturnId -- updated by pranay 21.12.2022
             ,o.OrderId
-            ,CASE WHEN Net - (inv.OrderRefundAmount + ISNULL(toref.WalletReverse,0))>=-1 AND
-			Net - (inv.RefundAmount + ISNULL(toref.WalletReverse,0))>=-1 THEN inv.RefundAmount ELSE 0 END AS RefundAmount
+            ,inv.RefundAmount AS RefundAmount
             ,c.fullname,b.mobileno,NULL,NULL,'QC'
 				,o.OrderDate,NULL,o.CustUserId,b.EmailId,inv.Net,1,'Refund Initiated',1,10001,10001
 				,GETDATE(),GETDATE(),NULL,NULL,'Return','SSSPL',3,NULL,GETDATE(),
 				QCWalletNo
 				,CODPayment,CODPaymentQC,CODPaymentFKH
+                ,CASE WHEN Net - (inv.OrderRefundAmount + ISNULL(toref.WalletReverse,0))>=-1 THEN 0 ELSE 1 END AS isRefundExcess    -- added by pranay 02.01.2023
+                ,CASE WHEN Net - ISNULL(toref.WalletReverse,0) >=0 THEN Net - ISNULL(toref.WalletReverse,0) ELSE 0 END AS ExcessAmount      -- added by pranay 02.01.2023
 
 
 			FROM
@@ -318,6 +322,49 @@ INSERT INTO #tbl(ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetw
 	--			INNER JOIN (select distinct InvoiceId from #tblInvoiceOrder WHERE ReturnMedium = 'Q') s on s.InvoiceId = i.InvoiceId
 	--			 WHERE a.IsProcessed=0
 	--			 AND CONVERT(DATE,a.CreatedDate)=CONVERT(DATE,GETDATE())
+
+
+-- <added by pranay 02.01.2023
+
+DECLARE @finalRefundAmount numeric(10,2), @ReturnId bigint, @BalanceAmt numeric(10,2), @Counter int, @TotalCount int, @var NUMERIC(10,2), @OrderId bigint, @InsideCount int, @Counter2 int
+SET @Counter = 1
+
+SET @TotalCount = (SELECT COUNT (*) FROM #tbl where isRefundExcess = 1)
+PRINT @TotalCount
+WHILE (@Counter <= @TotalCount)
+    BEGIN
+SET @OrderId = (SELECT OrderId FROM (SELECT ROW_NUMBER() OVER(ORDER BY OrderId asc) RowId,* FROM #tbl where isRefundExcess = 1) t WHERE t.RowId = @Counter)
+PRINT @OrderId
+SET @InsideCount = (select count(*) from #tbl where OrderId = @OrderId)
+SET @BalanceAmt = (SELECT TOP (1) ExcessAmount from #tbl where OrderId = @OrderId)
+SET @Counter2 = 1
+WHILE (@Counter2 <= @InsideCount)
+    BEGIN
+        SET @ReturnId = (SELECT ReturnId FROM (SELECT ROW_NUMBER() OVER(ORDER BY (SELECT 0)) RowId,*FROM #tbl where OrderId = @OrderId) t WHERE t.RowId = @Counter2)
+        -- SET @ExcessAmount = (SELECT ExcessAmount FROM (SELECT ROW_NUMBER() OVER(ORDER BY (SELECT 0)) RowId,*FROM #tblRefundList) t WHERE t.RowId = @Counter2)
+        -- SET @BalanceAmt = @ExcessAmount
+        IF @BalanceAmt > 0
+        BEGIN
+
+            UPDATE #tbl
+            SET RefundAmount = (SELECT MIN(Col) FROM (VALUES (RefundAmount), (@BalanceAmt)) AS X(Col))
+            WHERE ReturnId = @ReturnId
+        END
+        ELSE
+        BEGIN
+            UPDATE #tbl
+            SET RefundAmount = 0.00
+            WHERE ReturnId = @ReturnId
+        END
+        SET @finalRefundAmount = (SELECT RefundAmount from #tbl where ReturnId = @ReturnId )
+        SET @Counter2 = @Counter2 + 1
+        SET @BalanceAmt = @BalanceAmt - @finalRefundAmount
+        CONTINUE;
+    END
+SET @Counter = @Counter + @InsideCount
+CONTINUE;
+END     -- added by pranay 02.01.2023>
+
 
 	INSERT INTO   [PaymentManagement].[tblRefundOrderPaymentForQC](ReturnId,OrderId,RefundAmount,CustName,CustMobileNo,PaymentGetwayTransacNo,GetWayResponse,PaymentGateWay -- updated by pranay 21.12.2022
                 ,OrderDate,AppType,CustUserId,EmailId,TotalPayAmount,IsRefundInitiated,InitialRefundStatus,PaymentGetwayId,CreatedBy,UpdatedBy
